@@ -1,0 +1,98 @@
+{
+  "project_name": "ReLoop",
+  "tagline": "Smart Reusable Container Return System & Circular Economy Platform for Campuses",
+  "context_type": "hybrid_fullstack",
+  "theme": {
+    "mode": "dark_and_light_toggle",
+    "default_mode": "dark",
+    "archetype": "ORGANIC & EARTHY FINTECH",
+    "primary_color": "#10B981",
+    "primary_emerald": "#059669",
+    "dark_bg": "#09120E",
+    "dark_surface": "#122019",
+    "dark_card": "#182C22",
+    "dark_border": "#234032",
+    "light_bg": "#F4F7F5",
+    "light_surface": "#FFFFFF",
+    "light_card": "#EAEFEA",
+    "light_border": "#D1DBD3",
+    "accent_mint": "#34D399",
+    "accent_gold": "#F59E0B",
+    "text_dark_primary": "#ECFDF5",
+    "text_dark_secondary": "#9CA3AF",
+    "text_light_primary": "#064E3B",
+    "text_light_secondary": "#4B5563"
+  },
+  "typography": {
+    "heading_font": "Outfit, sans-serif",
+    "body_font": "Plus Jakarta Sans, sans-serif",
+    "mono_font": "JetBrains Mono, monospace",
+    "google_fonts_url": "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Outfit:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap",
+    "scale": {
+      "hero_h1": "text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-none",
+      "section_h2": "text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight",
+      "subsection_h3": "text-xl sm:text-2xl font-semibold",
+      "card_h4": "text-lg sm:text-xl font-medium",
+      "body": "text-base leading-relaxed",
+      "small_label": "text-xs font-semibold uppercase tracking-wider"
+    }
+  },
+  "image_urls": {
+    "hero_reusable_containers": "https://images.unsplash.com/photo-1543352632-5a4b24e4d2a6?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MDV8MHwxfHNlYXJjaHw0fHxyZXVzYWJsZSUyMGZvb2QlMjBjb250YWluZXIlMjBzdXN0YWluYWJpbGl0eSUyMGNhbXB1c3xlbnwwfHx8fDE3ODkyMDk4NDN8MA&ixlib=rb-4.1.0&q=85",
+    "fresh_food_bowls": "https://images.unsplash.com/photo-1569420077790-afb136b3bb8c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MDV8MHwxfHNlYXJjaHwzfHxyZXVzYWJsZSUyMGZvb2QlMjBjb250YWluZXIlMjBzdXN0YWluYWJpbGl0eSUyMGNhbXB1c3xlbnwwfHx8fDE3ODkyMDk4NDN8MA&ixlib=rb-4.1.0&q=85",
+    "eco_dining_setup": "https://images.unsplash.com/photo-1615444814488-f0b1952b2f27?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNTl8MHwxfHNlYXJjaHxfHxyZWN5Y2xlJTIwc3VzdGFpbmFiaWxpdHklMjBncmVlbiUyMGZvb2QlMjBib3dsfGVufDB8fHx8MTc4OTIwOTg0M3ww&ixlib=rb-4.1.0&q=85"
+  },
+  "layouts_and_grids": {
+    "landing": "Asymmetric Swiss grid layout with hero section featuring floating glass badges, 5-stage Circular Economy timeline (REUSE -> RETURN -> REFUND -> CLEAN -> REUSE), impact stats, YESIST12 2026 competition ribbon, and SDG badges (11, 12, 13).",
+    "student_portal": "Mode B High Density Dashboard with sidebar navigation, container status overview cards, active RFID container ledger, INR refund wallet balance widget, deposit quick-topup modal, return history timeline, and sustainability impact tree counter.",
+    "canteen_admin_portal": "Dense Operations Command Center with real-time container issuance scanner, simulated RFID container return verifier, industrial washing queue batch system, student account ledger with INR transaction history, and Recharts analytics (return rate %, waste saved kg, reuse turnover velocity).",
+    "kiosk_simulator": "Full-screen interactive Touchscreen Kiosk UI with step-by-step simulated hardware triggers (Tap Student RFID -> Place Container on Weight Scale -> RFID Read Simulation -> Weight Validation Sensor -> Instant Deposit Credit INR ₹30 Animation -> Audio Beep & Receipt)."
+  },
+  "component_guidelines": {
+    "currency_symbol": "INR ₹ (default ₹30 per container deposit)",
+    "status_badges": {
+      "Available": "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
+      "Issued": "bg-amber-500/10 text-amber-400 border border-amber-500/20",
+      "Returned": "bg-blue-500/10 text-blue-400 border border-blue-500/20",
+      "Washing": "bg-purple-500/10 text-purple-400 border border-purple-500/20",
+      "Ready": "bg-teal-500/10 text-teal-400 border border-teal-500/20",
+      "Lost": "bg-red-500/10 text-red-400 border border-red-500/20",
+      "Damaged": "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+    },
+    "sdg_badges": [
+      {
+        "sdg": "SDG 12",
+        "title": "Responsible Consumption & Production",
+        "color": "#BF8B2E",
+        "desc": "Closing the loop on single-use campus takeaway packaging waste."
+      },
+      {
+        "sdg": "SDG 13",
+        "title": "Climate Action",
+        "color": "#3F7E44",
+        "desc": "Lowering carbon emissions by eliminating single-use plastics and paper containers."
+      },
+      {
+        "sdg": "SDG 11",
+        "title": "Sustainable Cities & Communities",
+        "color": "#FD9D24",
+        "desc": "Creating circular campus ecosystems with automated IoT container kiosks."
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Ensure all interactive elements have data-testid attributes (e.g. data-testid='kiosk-tap-id-button', data-testid='issue-container-submit').",
+    "Use Lucide-React icons for UI indicators (e.g. RefreshCw, ShieldCheck, Wallet, QrCode, HardDrive, Leaf, Recycle, Scale, Droplets).",
+    "Build seamless mock data pre-populated with realistic campus container activity (e.g., GreenBowl RFID #8942, Campus Bento #1204, EcoTiffin #5521) so the platform is fully interactive immediately upon loading.",
+    "Implement the full Kiosk Simulator with realistic hardware step transitions (Simulate RFID Scan, Simulate Strain Gauge Weight Check 240g ± 15g, Simulate Sanitize Jet, Refund INR ₹30 trigger).",
+    "Provide clear role switching between Student Demo Mode, Canteen Admin Dashboard, and IoT Return Kiosk Simulator via a persistent top banner or switcher."
+  ],
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
+    "Dark colors look good when used independently without full gradients; avoid muddy backgrounds.",
+    "Layer cards with z-index hierarchy and glassmorphic backdrop filters (backdrop-blur-md) for depth.",
+    "Never use generic centered layouts or Inter font for main headings; use Outfit or similar display typography.",
+    "Containers with borders MUST have internal padding (p-6 or p-8) to prevent text collision.",
+    "Never use raw transparent backgrounds on headers or overlays; always add blur and bg-opacity.",
+    "Ensure sonner toasts confirm actions like 'Container Issued', 'Deposit Refunded (₹30)', or 'Sanitization Queue Updated'."
+  ]
+}
