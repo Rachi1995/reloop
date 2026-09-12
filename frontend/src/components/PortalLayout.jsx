@@ -3,7 +3,7 @@ import { useAuth } from "@/context/AuthContext";
 import { rupee } from "@/components/StatusBadge";
 import {
   LayoutDashboard, Package, Wallet, ArrowLeftRight, History, User, Recycle,
-  PackagePlus, PackageCheck, Users, Droplets, BarChart3, Settings, LogOut, Menu, X, Monitor,
+  PackagePlus, PackageCheck, Users, Droplets, BarChart3, Settings, LogOut, Menu, X, Monitor, BellRing,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -26,6 +26,7 @@ const ADMIN_NAV = [
   { to: "/app/students", label: "Students", icon: Users, tid: "nav-students" },
   { to: "/app/all-transactions", label: "Transactions", icon: ArrowLeftRight, tid: "nav-all-transactions" },
   { to: "/app/cleaning", label: "Cleaning", icon: Droplets, tid: "nav-cleaning" },
+  { to: "/app/alerts", label: "Alerts", icon: BellRing, tid: "nav-alerts" },
   { to: "/app/analytics", label: "Analytics", icon: BarChart3, tid: "nav-analytics" },
 ];
 

@@ -231,3 +231,148 @@ class TestStudentSelf:
         r = requests.get(f"{BASE}/students/me/returns", headers=h(student_token))
         assert r.status_code == 200
         assert isinstance(r.json(), list)
+
+
+
+# ---------------- Kiosk student tap ----------------
+class TestKioskStudentTap:
+    def test_kiosk_students_public(self):
+        r = requests.get(f"{BASE}/kiosk/students")
+        assert r.status_code == 200
+        lst = r.json()
+        assert isinstance(lst, list) and len(lst) >= 1
+        s0 = lst[0]
+        for k in ("id", "name", "student_code"):
+            assert k in s0
+
+    def test_kiosk_student_returns_only_issued(self, admin_token):
+        # find a student who has an Issued txn
+        txns = requests.get(f"{BASE}/transactions", headers=h(admin_token)).json()
+        issued = [t for t in txns if t["status"] == "Issued"]
+        assert issued, "Need at least one issued container for this test"
+        sid = issued[0]["student_id"]
+        r = requests.get(f"{BASE}/kiosk/student-returns/{sid}")
+        assert r.status_code == 200
+        items = r.json()
+        assert isinstance(items, list) and len(items) >= 1
+        for it in items:
+            for k in ("rfid_uid", "container_code", "empty_weight", "student_name", "deposit_amount"):
+                assert k in it
+
+
+# ---------------- Wallet top-up ----------------
+class TestWalletTopup:
+    def test_topup_success(self):
+        token = _login("priya@campus.edu", "Student@123")
+        me1 = requests.get(f"{BASE}/auth/me", headers=h(token)).json()
+        before = me1["wallet_balance"]
+        r = requests.post(f"{BASE}/wallet/topup", headers=h(token), json={"amount": 100})
+        assert r.status_code == 200, r.text
+        j = r.json()
+        assert j["amount"] == 100
+        assert round(j["new_balance"], 2) == round(before + 100, 2)
+        # verify txn row
+        txns = requests.get(f"{BASE}/students/me/transactions", headers=h(token)).json()
+        assert any(t["transaction_type"] == "Topup" and t["amount"] == 100 for t in txns)
+
+    def test_topup_reject_zero(self, student_token):
+        r = requests.post(f"{BASE}/wallet/topup", headers=h(student_token), json={"amount": 0})
+        assert r.status_code == 400
+
+    def test_topup_reject_too_large(self, student_token):
+        r = requests.post(f"{BASE}/wallet/topup", headers=h(student_token), json={"amount": 20000})
+        assert r.status_code == 400
+
+    def test_topup_reject_non_student(self, admin_token):
+        r = requests.post(f"{BASE}/wallet/topup", headers=h(admin_token), json={"amount": 100})
+        assert r.status_code == 403
+
+
+# ---------------- ESG report ----------------
+class TestESGReport:
+    def test_admin_report(self, admin_token):
+        r = requests.get(f"{BASE}/analytics/report", headers=h(admin_token))
+        assert r.status_code == 200
+        j = r.json()
+        for k in ("generated_at", "rows", "totals"):
+            assert k in j
+        assert isinstance(j["rows"], list) and len(j["rows"]) >= 1
+        row = j["rows"][0]
+        for k in ("month", "issued", "returned", "return_rate", "disposables_avoided",
+                  "waste_kg", "co2_kg", "cost_saved"):
+            assert k in row
+        for k in ("issued", "returned", "disposables_avoided", "waste_kg", "co2_kg", "cost_saved"):
+            assert k in j["totals"]
+
+    def test_student_cannot_report(self, student_token):
+        r = requests.get(f"{BASE}/analytics/report", headers=h(student_token))
+        assert r.status_code == 403
+
+
+# ---------------- Overdue / lost alerts ----------------
+class TestAlerts:
+    def test_overdue_lists_seeded(self, admin_token):
+        r = requests.get(f"{BASE}/alerts/overdue", headers=h(admin_token))
+        assert r.status_code == 200
+        j = r.json()
+        assert "threshold_hours" in j and "overdue" in j
+        assert isinstance(j["overdue"], list)
+        assert len(j["overdue"]) >= 1, "Expected the seeded ~96h overdue container"
+        item = j["overdue"][0]
+        for k in ("id", "student_id", "student_name", "container_code", "hours_overdue", "reminded"):
+            assert k in item
+
+    def test_student_cannot_view_overdue(self, student_token):
+        r = requests.get(f"{BASE}/alerts/overdue", headers=h(student_token))
+        assert r.status_code == 403
+
+    def test_remind_creates_notification(self, admin_token):
+        overdue = requests.get(f"{BASE}/alerts/overdue", headers=h(admin_token)).json()["overdue"]
+        assert overdue
+        txn = overdue[0]
+        r = requests.post(f"{BASE}/alerts/remind", headers=h(admin_token), json={"transaction_id": txn["id"]})
+        assert r.status_code == 200
+        assert r.json()["student_name"] == txn["student_name"]
+
+        # student sees a notification (login as the student whose email we know matches student_id)
+        # We can't reverse email → use any student token that has a notification. Try arjun.
+        stok = _login("arjun@campus.edu", "Student@123")
+        arjun = requests.get(f"{BASE}/auth/me", headers=h(stok)).json()
+        if arjun["id"] == txn["student_id"]:
+            notes = requests.get(f"{BASE}/students/me/notifications", headers=h(stok)).json()
+            assert any(n["reference"] == txn["id"] for n in notes)
+
+    def test_mark_read(self, admin_token):
+        stok = _login("arjun@campus.edu", "Student@123")
+        notes = requests.get(f"{BASE}/students/me/notifications", headers=h(stok)).json()
+        if not notes:
+            pytest.skip("no notifications for arjun")
+        nid = notes[0]["id"]
+        r = requests.post(f"{BASE}/notifications/{nid}/read", headers=h(stok))
+        assert r.status_code == 200
+        notes2 = requests.get(f"{BASE}/students/me/notifications", headers=h(stok)).json()
+        target = next(n for n in notes2 if n["id"] == nid)
+        assert target["read"] is True
+
+    def test_mark_lost_flow(self, admin_token):
+        # Pick an available container, issue it to a student, then mark-lost
+        containers = requests.get(f"{BASE}/containers", headers=h(admin_token)).json()
+        available = [c for c in containers if c["status"] == "Available"]
+        if not available:
+            pytest.skip("no available container")
+        cont = available[0]
+        students = requests.get(f"{BASE}/students", headers=h(admin_token)).json()
+        stu = next(s for s in students if s["email"] == "karan@campus.edu")
+        issue = requests.post(f"{BASE}/containers/issue", headers=h(admin_token),
+                              json={"student_id": stu["id"], "container_id": cont["id"]})
+        assert issue.status_code == 200
+        txn_id = issue.json()["id"]
+        r = requests.post(f"{BASE}/containers/{cont['id']}/mark-lost", headers=h(admin_token))
+        assert r.status_code == 200
+        # container now Lost
+        c2 = next(c for c in requests.get(f"{BASE}/containers", headers=h(admin_token)).json() if c["id"] == cont["id"])
+        assert c2["status"] == "Lost"
+        # txn no longer Issued
+        txns = requests.get(f"{BASE}/transactions", headers=h(admin_token)).json()
+        t = next(t for t in txns if t["id"] == txn_id)
+        assert t["status"] == "Lost"

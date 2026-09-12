@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { PageHeader } from "@/components/PortalLayout";
 import { StatusBadge, rupee } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
-import { Wallet, Package, Recycle, Leaf, Droplets, ArrowRight, Monitor, TrendingUp } from "lucide-react";
+import { Wallet, Package, Recycle, Leaf, Droplets, ArrowRight, Monitor, TrendingUp, BellRing, X } from "lucide-react";
 
 function StatCard({ icon: Icon, label, value, tint = "primary", testid }) {
   return (
@@ -23,15 +23,45 @@ export default function StudentDashboard() {
   const { user } = useAuth();
   const [summary, setSummary] = useState(null);
   const [current, setCurrent] = useState(null);
+  const [notifs, setNotifs] = useState([]);
+
+  const loadNotifs = () => api.get("/students/me/notifications").then((r) => setNotifs(r.data)).catch(() => {});
 
   useEffect(() => {
     api.get("/students/me/summary").then((r) => setSummary(r.data)).catch(() => {});
     api.get("/students/me/container").then((r) => setCurrent(r.data)).catch(() => {});
+    loadNotifs();
   }, []);
+
+  const dismiss = async (id) => {
+    await api.post(`/notifications/${id}/read`).catch(() => {});
+    loadNotifs();
+  };
+
+  const unread = notifs.filter((n) => !n.read);
 
   return (
     <div>
       <PageHeader title={`Hi, ${user?.name?.split(" ")[0]} 👋`} subtitle="Your reusable container impact at a glance" />
+
+      {unread.length > 0 && (
+        <div className="mb-6 space-y-2" data-testid="notifications">
+          {unread.map((n) => (
+            <div key={n.id} className="flex items-start justify-between gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4" data-testid={`notif-${n.id}`}>
+              <div className="flex gap-3">
+                <BellRing className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
+                <div>
+                  <p className="font-semibold text-amber-400">{n.title}</p>
+                  <p className="text-sm text-muted-foreground">{n.message}</p>
+                </div>
+              </div>
+              <button onClick={() => dismiss(n.id)} className="text-muted-foreground hover:text-foreground" data-testid={`notif-dismiss-${n.id}`}>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard icon={Wallet} label="Wallet balance" value={rupee(summary?.wallet_balance)} testid="stat-wallet" />

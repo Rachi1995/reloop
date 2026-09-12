@@ -1,19 +1,43 @@
 import { useEffect, useState } from "react";
-import api from "@/lib/api";
+import api, { apiErrorMessage } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { PageHeader } from "@/components/PortalLayout";
 import { rupee, StatusBadge } from "@/components/StatusBadge";
-import { Wallet, ArrowDownLeft, ArrowUpRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter,
+} from "@/components/ui/dialog";
+import { Wallet, ArrowDownLeft, ArrowUpRight, Plus, Smartphone } from "lucide-react";
+import { toast } from "sonner";
 
 export default function WalletPage() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [txns, setTxns] = useState([]);
   const [summary, setSummary] = useState(null);
+  const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState("100");
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
+  const load = () => {
     api.get("/students/me/transactions").then((r) => setTxns(r.data)).catch(() => {});
     api.get("/students/me/summary").then((r) => setSummary(r.data)).catch(() => {});
-  }, []);
+  };
+  useEffect(() => { load(); }, []);
+
+  const topup = async (e) => {
+    e?.preventDefault();
+    setLoading(true);
+    try {
+      const { data } = await api.post("/wallet/topup", { amount: Number(amount) });
+      toast.success(`${rupee(data.amount)} added to your wallet`);
+      setOpen(false); setAmount("100");
+      await refreshUser();
+      load();
+    } catch (err) { toast.error(apiErrorMessage(err.response?.data?.detail)); }
+    finally { setLoading(false); }
+  };
 
   return (
     <div>
@@ -27,6 +51,36 @@ export default function WalletPage() {
         <p className="mt-6 text-sm text-muted-foreground">Available balance</p>
         <p className="font-display text-4xl font-extrabold text-primary" data-testid="wallet-balance">{rupee(summary?.wallet_balance ?? user?.wallet_balance)}</p>
         <p className="mt-4 font-mono text-sm text-muted-foreground">{user?.name} · {user?.student_code}</p>
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger asChild>
+            <Button className="mt-5 w-full" data-testid="wallet-topup-btn"><Plus className="mr-2 h-4 w-4" />Add Money</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Top up your wallet</DialogTitle>
+              <DialogDescription>Add money to pre-load container deposits. Simulated payment.</DialogDescription>
+            </DialogHeader>
+            <form onSubmit={topup} className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                {[50, 100, 200, 500].map((v) => (
+                  <button type="button" key={v} onClick={() => setAmount(String(v))} data-testid={`topup-preset-${v}`}
+                    className={`rounded-xl border px-4 py-2 text-sm font-semibold ${String(v) === amount ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-primary/50"}`}>
+                    {rupee(v)}
+                  </button>
+                ))}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="amt">Amount (₹)</Label>
+                <Input id="amt" type="number" min="1" value={amount} onChange={(e) => setAmount(e.target.value)} required data-testid="topup-amount" />
+              </div>
+              <div className="flex items-center gap-2 rounded-xl border border-sky-500/20 bg-sky-500/5 p-3 text-xs text-sky-400">
+                <Smartphone className="h-4 w-4" /> Simulated UPI / card payment — no real money is charged.
+              </div>
+              <DialogFooter>
+                <Button type="submit" disabled={loading} data-testid="topup-submit">{loading ? "Processing..." : `Add ${rupee(amount || 0)}`}</Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="rounded-2xl border border-border bg-card/40">

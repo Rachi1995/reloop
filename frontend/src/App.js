@@ -23,6 +23,7 @@ import Containers from "@/pages/admin/Containers";
 import Students from "@/pages/admin/Students";
 import AdminTransactions from "@/pages/admin/AdminTransactions";
 import Cleaning from "@/pages/admin/Cleaning";
+import Alerts from "@/pages/admin/Alerts";
 import Analytics from "@/pages/admin/Analytics";
 import SettingsPage from "@/pages/admin/SettingsPage";
 
@@ -79,6 +80,7 @@ function AppRoutes() {
                     <Route path="students" element={<Students />} />
                     <Route path="all-transactions" element={<AdminTransactions />} />
                     <Route path="cleaning" element={<Cleaning />} />
+                    <Route path="alerts" element={<Alerts />} />
                     <Route path="analytics" element={<Analytics />} />
                     <Route path="settings" element={<SettingsPage />} />
                   </>

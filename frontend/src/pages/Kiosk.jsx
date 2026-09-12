@@ -13,6 +13,8 @@ const STEPS = ["welcome", "select", "placing", "rfid", "weight", "success", "fai
 
 export default function Kiosk() {
   const [step, setStep] = useState("welcome");
+  const [students, setStudents] = useState([]);
+  const [student, setStudent] = useState(null);
   const [returns, setReturns] = useState([]);
   const [selected, setSelected] = useState(null);
   const [scan, setScan] = useState(null);
@@ -20,18 +22,25 @@ export default function Kiosk() {
   const [result, setResult] = useState(null);
   const [emptyMode, setEmptyMode] = useState(true);
 
-  const loadReturns = async () => {
-    try {
-      const { data } = await api.get("/kiosk/available-returns");
-      setReturns(data);
-    } catch { setReturns([]); }
+  const loadStudents = async () => {
+    try { const { data } = await api.get("/kiosk/students"); setStudents(data); }
+    catch { setStudents([]); }
   };
 
-  useEffect(() => { loadReturns(); }, []);
+  useEffect(() => { loadStudents(); }, []);
+
+  const tapStudent = async (s) => {
+    setStudent(s);
+    try {
+      const { data } = await api.get(`/kiosk/student-returns/${s.id}`);
+      setReturns(data);
+      setStep("select");
+    } catch { setReturns([]); setStep("select"); }
+  };
 
   const reset = () => {
-    setStep("welcome"); setSelected(null); setScan(null); setWeight(null); setResult(null); setEmptyMode(true);
-    loadReturns();
+    setStep("welcome"); setStudent(null); setReturns([]); setSelected(null);
+    setScan(null); setWeight(null); setResult(null); setEmptyMode(true);
   };
 
   const chooseReturn = async (item) => {
@@ -111,19 +120,42 @@ export default function Kiosk() {
                   </div>
                   <h2 className="mb-2 text-center font-display text-2xl font-bold">Tap your Student ID</h2>
                   <p className="mb-6 text-center text-sm text-muted-foreground">Place your reusable container on the return platform to begin</p>
-                  <Button className="w-full" size="lg" onClick={() => setStep("select")} data-testid="kiosk-start">
+                  <Button className="w-full" size="lg" onClick={() => setStep("tapId")} data-testid="kiosk-start">
                     Start Return
                   </Button>
                 </Screen>
               )}
 
+              {step === "tapId" && (
+                <Screen key="tapId">
+                  <h2 className="mb-1 font-display text-xl font-bold">Tap or select your Student ID</h2>
+                  <p className="mb-4 text-sm text-muted-foreground">Identify yourself to load your issued containers</p>
+                  <div className="max-h-[280px] space-y-2 overflow-y-auto pr-1">
+                    {students.map((s) => (
+                      <button key={s.id} onClick={() => tapStudent(s)} data-testid={`kiosk-student-${s.id}`}
+                        className="flex w-full items-center gap-3 rounded-xl border border-border bg-secondary/40 p-3 text-left hover:border-primary/50">
+                        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/15 font-display font-bold text-primary">{s.name[0]}</span>
+                        <div>
+                          <p className="font-semibold">{s.name}</p>
+                          <p className="font-mono text-xs text-muted-foreground">{s.student_code || "—"}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </Screen>
+              )}
+
               {step === "select" && (
                 <Screen key="select">
-                  <h2 className="mb-1 font-display text-xl font-bold">Select a container to return</h2>
-                  <p className="mb-4 text-sm text-muted-foreground">Simulating currently issued RFID containers</p>
+                  <div className="mb-1 flex items-center gap-2">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/15 font-display text-sm font-bold text-primary">{student?.name?.[0]}</span>
+                    <h2 className="font-display text-xl font-bold">Hi {student?.name?.split(" ")[0]}, pick a container</h2>
+                  </div>
+                  <p className="mb-4 text-sm text-muted-foreground">Your currently issued RFID containers</p>
                   {returns.length === 0 ? (
                     <div className="rounded-xl border border-border bg-secondary/30 p-6 text-center text-sm text-muted-foreground" data-testid="kiosk-no-returns">
-                      No issued containers to return right now. Issue one from the Canteen portal first.
+                      You have no issued containers to return right now.
+                      <button onClick={() => setStep("tapId")} className="mt-3 block w-full text-primary hover:underline">← Choose a different ID</button>
                     </div>
                   ) : (
                     <div className="space-y-2">

@@ -144,6 +144,15 @@ class SettingsInput(BaseModel):
     deposit_amount: float
     weight_tolerance: float
     disposable_cost: float
+    lost_threshold_hours: int = 48
+
+
+class TopupInput(BaseModel):
+    amount: float
+
+
+class RemindInput(BaseModel):
+    transaction_id: str
 
 
 class UserUpdateInput(BaseModel):
@@ -156,9 +165,11 @@ class UserUpdateInput(BaseModel):
 async def get_settings() -> dict:
     s = await db.settings.find_one({"id": "global"})
     if not s:
-        s = {"id": "global", "deposit_amount": DEPOSIT_DEFAULT, "weight_tolerance": 15.0, "disposable_cost": DISPOSABLE_COST}
+        s = {"id": "global", "deposit_amount": DEPOSIT_DEFAULT, "weight_tolerance": 15.0,
+             "disposable_cost": DISPOSABLE_COST, "lost_threshold_hours": 48}
         await db.settings.insert_one(dict(s))
     s.pop("_id", None)
+    s.setdefault("lost_threshold_hours", 48)
     return s
 
 
@@ -558,6 +569,134 @@ async def update_settings(data: SettingsInput, user: dict = Depends(require_role
     return await get_settings()
 
 
+# ------------------------------------------------------------------ wallet top-up (simulated)
+@api_router.post("/wallet/topup")
+async def wallet_topup(data: TopupInput, user: dict = Depends(get_current_user)):
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Only students have a wallet")
+    if data.amount <= 0 or data.amount > 10000:
+        raise HTTPException(status_code=400, detail="Enter an amount between ₹1 and ₹10,000")
+    fresh = await db.users.find_one({"id": user["id"]})
+    new_balance = round(fresh.get("wallet_balance", 0.0) + data.amount, 2)
+    ts = now_iso()
+    await db.users.update_one({"id": user["id"]}, {"$set": {"wallet_balance": new_balance}})
+    await db.wallet_transactions.insert_one({
+        "id": str(uuid.uuid4()), "student_id": user["id"], "transaction_type": "Topup",
+        "amount": data.amount, "reference": "SIM-" + str(uuid.uuid4())[:8].upper(), "balance_after": new_balance,
+        "description": "Wallet top-up (simulated UPI/card)", "created_at": ts,
+    })
+    return {"new_balance": new_balance, "amount": data.amount}
+
+
+# ------------------------------------------------------------------ kiosk: student tap
+@api_router.get("/kiosk/students")
+async def kiosk_students():
+    return await db.users.find({"role": "student"}, {"_id": 0, "id": 1, "name": 1, "student_code": 1}).sort("name", 1).to_list(1000)
+
+
+@api_router.get("/kiosk/student-returns/{student_id}")
+async def kiosk_student_returns(student_id: str):
+    txns = await db.container_transactions.find({"student_id": student_id, "status": "Issued"}, {"_id": 0}).to_list(200)
+    out = []
+    for t in txns:
+        c = await db.containers.find_one({"id": t["container_id"]}, {"_id": 0})
+        if c:
+            out.append({"rfid_uid": c["rfid_uid"], "container_code": c["container_code"],
+                        "empty_weight": c["empty_weight"], "student_name": t["student_name"],
+                        "deposit_amount": t["deposit_amount"]})
+    return out
+
+
+# ------------------------------------------------------------------ ESG monthly report
+@api_router.get("/analytics/report")
+async def analytics_report(user: dict = Depends(require_roles("admin", "staff"))):
+    settings = await get_settings()
+    txns = await db.container_transactions.find({}, {"_id": 0}).to_list(10000)
+    from collections import defaultdict
+    monthly = defaultdict(lambda: {"issued": 0, "returned": 0})
+    for t in txns:
+        if t.get("issued_at"):
+            monthly[t["issued_at"][:7]]["issued"] += 1
+        if t.get("returned_at") and t.get("status") in ("Returned", "Refunded"):
+            monthly[t["returned_at"][:7]]["returned"] += 1
+    rows = []
+    for m in sorted(monthly.keys()):
+        r = monthly[m]
+        rows.append({
+            "month": m, "issued": r["issued"], "returned": r["returned"],
+            "return_rate": round((r["returned"] / r["issued"]) * 100, 1) if r["issued"] else 0.0,
+            "disposables_avoided": r["returned"],
+            "waste_kg": round(r["returned"] * WASTE_PER_CONTAINER_G / 1000, 3),
+            "co2_kg": round(r["returned"] * CO2_PER_CONTAINER_G / 1000, 3),
+            "cost_saved": round(r["returned"] * settings["disposable_cost"], 2),
+        })
+    tr = sum(x["returned"] for x in rows)
+    totals = {
+        "issued": sum(x["issued"] for x in rows), "returned": tr, "disposables_avoided": tr,
+        "waste_kg": round(tr * WASTE_PER_CONTAINER_G / 1000, 3),
+        "co2_kg": round(tr * CO2_PER_CONTAINER_G / 1000, 3),
+        "cost_saved": round(tr * settings["disposable_cost"], 2),
+    }
+    return {"generated_at": now_iso(), "rows": rows, "totals": totals}
+
+
+# ------------------------------------------------------------------ overdue / lost alerts
+@api_router.get("/alerts/overdue")
+async def overdue_alerts(user: dict = Depends(require_roles("admin", "staff"))):
+    settings = await get_settings()
+    threshold = settings.get("lost_threshold_hours", 48)
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=threshold)
+    txns = await db.container_transactions.find({"status": "Issued"}, {"_id": 0}).to_list(2000)
+    out = []
+    for t in txns:
+        issued = datetime.fromisoformat(t["issued_at"])
+        if issued < cutoff:
+            hours = round((datetime.now(timezone.utc) - issued).total_seconds() / 3600, 1)
+            reminded = await db.notifications.find_one({"reference": t["id"]})
+            out.append({**t, "hours_overdue": hours, "reminded": bool(reminded)})
+    out.sort(key=lambda x: x["hours_overdue"], reverse=True)
+    return {"threshold_hours": threshold, "overdue": out}
+
+
+@api_router.post("/alerts/remind")
+async def remind_student(data: RemindInput, user: dict = Depends(require_roles("admin", "staff"))):
+    t = await db.container_transactions.find_one({"id": data.transaction_id}, {"_id": 0})
+    if not t:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    existing = await db.notifications.find_one({"reference": t["id"], "read": False})
+    if existing:
+        return {"message": "Reminder already pending", "student_name": t["student_name"]}
+    await db.notifications.insert_one({
+        "id": str(uuid.uuid4()), "student_id": t["student_id"], "type": "reminder",
+        "reference": t["id"], "read": False, "created_at": now_iso(),
+        "title": "Please return your container",
+        "message": f"Your reusable container {t['container_code']} is still out. Return it at the ReLoop kiosk to get your ₹{t['deposit_amount']:.0f} deposit back.",
+    })
+    return {"message": "Reminder sent", "student_name": t["student_name"]}
+
+
+@api_router.post("/containers/{cid}/mark-lost")
+async def mark_lost(cid: str, user: dict = Depends(require_roles("admin", "staff"))):
+    container = await db.containers.find_one({"id": cid})
+    if not container:
+        raise HTTPException(status_code=404, detail="Container not found")
+    ts = now_iso()
+    await db.containers.update_one({"id": cid}, {"$set": {"status": "Lost", "current_holder": None, "current_holder_name": None}})
+    await db.container_transactions.update_one({"container_id": cid, "status": "Issued"}, {"$set": {"status": "Lost", "returned_at": ts}})
+    return {"message": "Container marked as lost"}
+
+
+@api_router.get("/students/me/notifications")
+async def my_notifications(user: dict = Depends(get_current_user)):
+    return await db.notifications.find({"student_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+
+
+@api_router.post("/notifications/{nid}/read")
+async def read_notification(nid: str, user: dict = Depends(get_current_user)):
+    await db.notifications.update_one({"id": nid, "student_id": user["id"]}, {"$set": {"read": True}})
+    return {"message": "ok"}
+
+
 @api_router.get("/")
 async def root():
     return {"message": "ReLoop API online", "loop": "REUSE -> RETURN -> REFUND -> CLEAN -> REUSE"}
@@ -687,9 +826,35 @@ async def seed():
     logger.info("ReLoop demo data seeded.")
 
 
+async def ensure_demo_extras():
+    """Idempotently ensure one overdue issued container exists so the alerts demo has data."""
+    settings = await db.settings.find_one({"id": "global"})
+    if settings and settings.get("demo_overdue_seeded"):
+        return
+    student = await db.users.find_one({"role": "student"})
+    container = await db.containers.find_one({"status": {"$in": ["Available", "Ready"]}})
+    if student and container:
+        deposit = (await get_settings())["deposit_amount"]
+        issued_at = (datetime.now(timezone.utc) - timedelta(days=4)).isoformat()
+        txn_id = str(uuid.uuid4())
+        await db.container_transactions.insert_one({
+            "id": txn_id, "student_id": student["id"], "student_name": student["name"],
+            "container_id": container["id"], "container_code": container["container_code"],
+            "rfid_uid": container["rfid_uid"], "deposit_amount": deposit, "refund_amount": None,
+            "issued_at": issued_at, "returned_at": None, "status": "Issued", "issued_by": "Canteen Staff"})
+        await db.containers.update_one({"id": container["id"]}, {"$set": {
+            "status": "Issued", "current_holder": student["id"], "current_holder_name": student["name"]}})
+        await db.wallet_transactions.insert_one({
+            "id": str(uuid.uuid4()), "student_id": student["id"], "transaction_type": "Deposit",
+            "amount": -deposit, "reference": txn_id, "balance_after": student.get("wallet_balance", 0.0),
+            "description": f"Deposit held for container {container['container_code']}", "created_at": issued_at})
+    await db.settings.update_one({"id": "global"}, {"$set": {"demo_overdue_seeded": True}})
+
+
 @app.on_event("startup")
 async def on_startup():
     await seed()
+    await ensure_demo_extras()
 
 
 app.include_router(api_router)

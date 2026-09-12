@@ -2,14 +2,45 @@ import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { PageHeader } from "@/components/PortalLayout";
 import { rupee } from "@/components/StatusBadge";
-import { Leaf, Droplets, TrendingUp, Recycle, IndianRupee, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Leaf, Droplets, TrendingUp, Recycle, IndianRupee, Trash2, Download } from "lucide-react";
+import { toast } from "sonner";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
 } from "recharts";
 
 export default function Analytics() {
   const [d, setD] = useState(null);
+  const [downloading, setDownloading] = useState(false);
   useEffect(() => { api.get("/analytics/dashboard").then((r) => setD(r.data)).catch(() => {}); }, []);
+
+  const downloadReport = async () => {
+    setDownloading(true);
+    try {
+      const { data } = await api.get("/analytics/report");
+      const header = ["Month", "Issued", "Returned", "Return Rate %", "Disposables Avoided", "Plastic Waste (kg)", "CO2 Avoided (kg)", "Cost Saved (INR)"];
+      const lines = data.rows.map((r) => [r.month, r.issued, r.returned, r.return_rate, r.disposables_avoided, r.waste_kg, r.co2_kg, r.cost_saved].join(","));
+      const t = data.totals;
+      const totalLine = ["TOTAL", t.issued, t.returned, "", t.disposables_avoided, t.waste_kg, t.co2_kg, t.cost_saved].join(",");
+      const csv = [
+        "ReLoop — Sustainability / ESG Impact Report",
+        `Generated,${new Date(data.generated_at).toLocaleString("en-IN")}`,
+        "",
+        header.join(","),
+        ...lines,
+        totalLine,
+      ].join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `ReLoop_ESG_Report_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("ESG report downloaded");
+    } catch { toast.error("Could not generate report"); }
+    finally { setDownloading(false); }
+  };
 
   const impact = [
     { icon: Recycle, label: "Total reuse cycles", value: d?.total_returns ?? "—", tint: "text-primary" },
@@ -22,7 +53,9 @@ export default function Analytics() {
 
   return (
     <div>
-      <PageHeader title="Sustainability Analytics" subtitle="Measurable waste reduction & ESG impact — aligned with SDG 11/12/13" />
+      <PageHeader title="Sustainability Analytics" subtitle="Measurable waste reduction & ESG impact — aligned with SDG 11/12/13"
+        action={<Button onClick={downloadReport} disabled={downloading} data-testid="download-report"><Download className="mr-2 h-4 w-4" />{downloading ? "Preparing..." : "Download ESG Report"}</Button>}
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {impact.map((m) => (
